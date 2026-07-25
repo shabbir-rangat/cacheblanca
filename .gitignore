@@ -1,0 +1,14 @@
+# Build artifacts
+build/
+*.o
+*.out
+*.exe
+a.out
+*.program
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
