@@ -1,81 +1,76 @@
-#include<iostream>
-#include<sys/types.h>
-#include<sys/socket.h>
-#include<unistd.h>
-#include<netdb.h>
-#include<arpa/inet.h>
-#include<string.h>
+#include <arpa/inet.h>
+#include <iostream>
+#include <netdb.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 using namespace std;
-int main(){
-	int listening = socket(AF_INET,SOCK_STREAM,0);
-	if(listening == -1 ){
-		cerr<<"cant create a socket";
-		return -1;
-	}
-	
+int main() {
+  int listening = socket(AF_INET, SOCK_STREAM, 0);
+  if (listening == -1) {
+    cerr << "cant create a socket";
+    return -1;
+  }
 
-int opt = 1;
-if(setsockopt(listening, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1){
+  int opt = 1;
+  if (setsockopt(listening, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) ==
+      -1) {
     perror("setsockopt failed");
     return -1;
-}	
-	// binding the socket
-	sockaddr_in hint;
-	hint.sin_family = AF_INET;
-	hint.sin_port = htons(54000);
-	hint.sin_addr.s_addr = INADDR_ANY;
-	inet_pton(AF_INET,"0.0.0.0" , &hint.sin_addr);
-	if(bind(listening,(sockaddr*)&hint, sizeof(hint))==-1){
-		cerr<<"cant bind to ip/port";
-		perror("bind failed");
-		return -2;
-	}
-	if(listen(listening, SOMAXCONN)==-1){
-		cerr<<"cant listen!";
-		return -3;
-	}
-	sockaddr_in client;
-	socklen_t clientsize = sizeof(client);
-	char host[NI_MAXHOST];
-	char service[NI_MAXSERV];
+  }
+  // binding the socket
+  sockaddr_in hint;
+  hint.sin_family = AF_INET;
+  hint.sin_port = htons(54000);
+  hint.sin_addr.s_addr = INADDR_ANY;
+  inet_pton(AF_INET, "0.0.0.0", &hint.sin_addr);
+  if (bind(listening, (sockaddr *)&hint, sizeof(hint)) == -1) {
+    cerr << "cant bind to ip/port";
+    perror("bind failed");
+    return -2;
+  }
+  if (listen(listening, SOMAXCONN) == -1) {
+    cerr << "cant listen!";
+    return -3;
+  }
+  fd_set master, dummy;
+  FD_ZERO(&master);
+  FD_SET(listening, &master);
+  vector<int> clients;  
+  while (true) {
+    int maxfds = listening;
+    int socketSize = select(maxfds + 1, &dummy, nullptr, nullptr, nullptr);
+    if (socketSize == -1) {
+      perror("select failed");
+      break;
+    }
+    // FD_SETSIZE is 1024 default in linux
+    for (int i = 0; i < maxfds; ++i) {
+      	if(FD_ISSET(i,&dummy)){
+		if(i==listening){
+			sockaddr_in clientfd;
+			socklen_t clientSize = sizeof(clientfd);
+			int acceptedfd = accept(listening,( sockaddr*) clientfd , &clientSize );
+			 if (clientFd == -1) {
+         			 perror("accept failed");
+         			 continue;
+     			   }
+			FD_SET(acceptedfd , &master);
+			
+        	if (clientFd > maxfds) {
+         		 maxfds = clientFd;              // keep maxfds accurate
+       		 }
+       		 clients.push_back(clientFd);
 
-	//accept()
-	int clientSocket = accept(listening, (sockaddr*)&client,&clientsize);
-	if(clientSocket==-1){
-		cerr<<"problem client connection!";
-		return -4;
-	}
-	close(listening);
-	memset(host,0,NI_MAXHOST);
-	memset(service, 0 , NI_MAXSERV);
-	int result = getnameinfo((sockaddr*)&client , clientsize,host,NI_MAXHOST,service,NI_MAXSERV,0 );
-
-	if(result==0){
-		cout<<host<<"connected on "<<service<<endl;
-	}
-	else{
-		inet_ntop(AF_INET,&client.sin_addr,host,NI_MAXHOST);
-		cout<<host<<"connected on "<<ntohs(client.sin_port)<<endl;
-
-	}
-	char buff[4096];
-	while(true){
-		memset(buff,0,4096);
-		int byteRecv = recv(clientSocket, buff, 4096,0);
-		if(byteRecv==-1){
-			cerr<<"there was a connection issue";
-			break;
+       		cout << "New client connected: fd=" << clientFd << "\n";
+		
 		}
-		if(byteRecv==0){
-			cout<<"client disconected";
-			break;
-		}
-		cout << "Recieved: "<< string(buff,0,byteRecv)<<endl;
-		send(clientSocket,buff,byteRecv+1,0);
-	
-	}																									
-		close(clientSocket);
+	}
+    }
+  }
 
+  close(clientSocket);
 
-	return 0;
+  return 0;
 }
