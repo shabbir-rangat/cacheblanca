@@ -1,21 +1,6 @@
-# Build artifacts
-build/
-*.o
-*.out
-*.exe
-a.out
-*.program
-# Editor/IDE
-.vscode/
-.idea/
-*.swp
-
-# OS
-.DS_Store
-p
-program
-test.cpp
-test2.cpp
 a
 a.out
-dump.rdb
+program
+p
+*.rdb
+
