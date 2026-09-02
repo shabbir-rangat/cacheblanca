@@ -1,6 +1,7 @@
-a
-a.out
-program
-p
-*.rdb
-
+build/
+*.exe
+*.out
+*.o
+*.swo
+*.swn
+.vscode/
