@@ -1,8 +1,14 @@
 #include "tcp_server.hpp"
+#include "Store.hpp"
+#include "cbdecoder.hpp"
+#include "client.hpp"
+#include "dispatcher.hpp"
 #include "eventloop.hpp"
 #include <arpa/inet.h>
+#include <cstddef>
 #include <fcntl.h>
 #include <iostream>
+#include <memory>
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -65,6 +71,7 @@ void handle_new_connection(int serversocket, eventloop &loop) {
   socklen_t sfd_size = sizeof(sfd);
 
   int afd = accept(serversocket, (sockaddr *)&sfd, &sfd_size);
+
   if (afd == -1) {
     if (errno == EAGAIN || errno == EWOULDBLOCK)
       return; // False alarm, loop back
@@ -74,20 +81,57 @@ void handle_new_connection(int serversocket, eventloop &loop) {
 
   if (set_nonblocking(afd) == -1) {
     std::cerr << "fcntl" << std::endl;
+    close(afd);
     return;
   }
+  auto client = std::make_unique<Client>();
+  client->fd = afd;
+  loop.clients.emplace(afd, std::move(client));
+
   loop.addFd(afd, EPOLLIN);
 }
 void handle_client_read(int clientfd, eventloop &loop) {
-  char buff[4096];
-  ssize_t count = recv(clientfd, buff, sizeof(buff), 0);
+  auto it = loop.clients.find(clientfd);
+  if (it == loop.clients.end()) {
+    std::cerr << "unknown client fd" << std::endl;
+    return;
+  }
+  Client &client = *(it->second);
+  char buff[1024];
+  ssize_t num_of_bytes_recv = recv(clientfd, buff, sizeof(buff), 0);
+  std::cerr << "DEBUG: recv() returned " << num_of_bytes_recv << " bytes on fd"
+            << clientfd << "\n";
 
-  if (count <= 0) {
+  if (num_of_bytes_recv <= 0) {
     loop.removefd(clientfd); // needs loop's epfd_ internally
     return;
   }
+  client.read_buffer.append(buff, num_of_bytes_recv);
+  while (true) {
+    size_t consumed = 0;
+    command cmd;
+    auto result = decode_command(client.read_buffer, consumed, cmd);
+    if (result == parserResult::INCOMPLETE) {
+      break;
+    }
+    if (result == parserResult::ERROR) {
+      std::cerr << "protocol error on  fd" << clientfd << std::endl;
+      loop.removefd(clientfd);
 
-  std::string str(buff, count);
-  std::cout << "client " << clientfd << " sent: " << str << std::endl;
-  send(clientfd, buff, count, 0);
+      return;
+    }
+    dispatche(cmd, client, loop.myStore);
+    client.read_buffer.erase(0, consumed);
+  }
+  if (!client.write_buffer.empty()) {
+    ssize_t sent = send(clientfd, client.write_buffer.data(),
+                        client.write_buffer.size(), 0);
+
+    if (sent > 0) {
+      client.write_buffer.erase(0, sent);
+    }
+    // for v1: ignoring the case where `sent < write_buffer.size()` (partial
+    // write) — fine for small replies, but a real EPOLLOUT-based flush would
+    // handle it properly later
+  }
 }

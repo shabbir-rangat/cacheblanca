@@ -1,4 +1,5 @@
 #include "eventloop.hpp"
+#include "client.hpp"
 #include "tcp_server.hpp"
 #include <cstdint>
 #include <iostream>

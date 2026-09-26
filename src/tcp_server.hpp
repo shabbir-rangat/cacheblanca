@@ -1,4 +1,5 @@
 #pragma once
+#include "client.hpp"
 #include "eventloop.hpp"
 int init_server_socket(int port);
 void run_eventloop(int epfd, int serversocket);
